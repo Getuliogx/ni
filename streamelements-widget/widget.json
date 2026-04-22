@@ -2,12 +2,12 @@
   "apiBaseUrl": {
     "type": "text",
     "label": "API Base URL",
-    "value": "https://SEU-BACKEND.com"
+    "value": "https://ni-1.onrender.com"
   },
   "channel": {
     "type": "text",
     "label": "Canal Twitch",
-    "value": "SEU_CANAL"
+    "value": "icarolinaporto"
   },
   "timezone": {
     "type": "text",
