@@ -2,8 +2,8 @@ const root = document.getElementById('birthday-se-root');
 const shown = new Set();
 
 const fieldData = {
-  apiBaseUrl: 'https://SEU-BACKEND.com',
-  channel: 'SEU_CANAL',
+  apiBaseUrl: 'https://ni-1.onrender.com',
+  channel: 'icarolinaporto',
   timezone: 'America/Sao_Paulo',
   pollSeconds: 30
 };
