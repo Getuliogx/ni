@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Birthday Live Alert</title>
+  <style>
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #111318; color: #fff; padding: 24px; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    .card { background: #1a1f29; border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 20px; margin-bottom: 20px; }
+    h1, h2 { margin-top: 0; }
+    form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    input, textarea, button { padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); font-size: 15px; }
+    input, textarea { background: #0f131b; color: #fff; }
+    textarea { min-height: 92px; resize: vertical; }
+    button { background: #ff4fb3; color: #fff; cursor: pointer; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; vertical-align: top; }
+    .danger { background: #7b2136; }
+    .muted { color: #bfc6d4; font-size: 14px; }
+    .full { grid-column: 1 / -1; }
+    img.avatar { width: 48px; height: 48px; object-fit: cover; border-radius: 999px; background: #0f131b; }
+    code { word-break: break-all; }
+    @media (max-width: 900px) { form { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Birthday Live Alert</h1>
+      <p class="muted">Abra com <code>/admin?key=SUA_CHAVE</code>. Este painel já está preparado para vários canais Twitch no mesmo backend.</p>
+    </div>
+
+    <div class="card">
+      <h2>Adicionar ou atualizar</h2>
+      <form id="form">
+        <input name="channel" placeholder="canal_twitch" required />
+        <input name="username" placeholder="viewer" required />
+        <input name="date" placeholder="12/08" required />
+        <input name="time" placeholder="09:30" required />
+        <input name="timezone" placeholder="America/Sao_Paulo" value="America/Sao_Paulo" required />
+        <input name="avatarUrl" placeholder="Avatar manual (opcional)" />
+        <textarea class="full" name="messageTemplate" placeholder="Mensagem. Use {nick}, {channel}, {date}, {time}.">🎉 Feliz aniversário, {nick}!</textarea>
+        <button type="submit">Salvar</button>
+      </form>
+      <p id="status" class="muted"></p>
+    </div>
+
+    <div class="card">
+      <h2>Lista</h2>
+      <p class="muted">Filtre por canal com <code>?key=SUA_CHAVE&amp;channel=nomedocanal</code>.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Avatar</th>
+            <th>Canal</th>
+            <th>Viewer</th>
+            <th>Data</th>
+            <th>Hora</th>
+            <th>Mensagem</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const key = params.get('key');
+    const channelFilter = (params.get('channel') || '').trim();
+    const statusEl = document.getElementById('status');
+    const rowsEl = document.getElementById('rows');
+    const form = document.getElementById('form');
+
+    if (!key) {
+      statusEl.textContent = 'Falta ?key=SUA_CHAVE na URL.';
+    }
+
+    async function load() {
+      const url = new URL('/api/birthdays', location.origin);
+      url.searchParams.set('key', key || '');
+      if (channelFilter) url.searchParams.set('channel', channelFilter);
+      const res = await fetch(url);
+      const data = await res.json();
+      rowsEl.innerHTML = '';
+      for (const item of data.items || []) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${item.avatarUrl ? `<img class="avatar" src="${item.avatarUrl}" alt="avatar">` : ''}</td>
+          <td>${item.channel}</td>
+          <td>${item.username}</td>
+          <td>${item.date}</td>
+          <td>${item.time}</td>
+          <td>${item.messageTemplate}</td>
+          <td><button class="danger" data-channel="${item.channel}" data-user="${item.username}">Apagar</button></td>
+        `;
+        rowsEl.appendChild(tr);
+      }
+      rowsEl.querySelectorAll('button').forEach(button => {
+        button.addEventListener('click', async () => {
+          await fetch(`/api/birthdays/${encodeURIComponent(button.dataset.channel)}/${encodeURIComponent(button.dataset.user)}?key=${encodeURIComponent(key)}`, { method: 'DELETE' });
+          load();
+        });
+      });
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const body = Object.fromEntries(new FormData(form).entries());
+      const res = await fetch(`/api/birthdays?key=${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        statusEl.textContent = 'Erro ao salvar.';
+        return;
+      }
+      statusEl.textContent = 'Salvo com sucesso.';
+      load();
+    });
+
+    if (channelFilter) form.channel.value = channelFilter;
+    load();
+  </script>
+</body>
+</html>

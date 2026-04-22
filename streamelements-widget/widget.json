@@ -1,0 +1,25 @@
+{
+  "apiBaseUrl": {
+    "type": "text",
+    "label": "API Base URL",
+    "value": "https://SEU-BACKEND.com"
+  },
+  "channel": {
+    "type": "text",
+    "label": "Canal Twitch",
+    "value": "SEU_CANAL"
+  },
+  "timezone": {
+    "type": "text",
+    "label": "Timezone",
+    "value": "America/Sao_Paulo"
+  },
+  "pollSeconds": {
+    "type": "number",
+    "label": "Poll (segundos)",
+    "value": 30,
+    "min": 5,
+    "max": 300,
+    "step": 1
+  }
+}
