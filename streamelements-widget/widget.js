@@ -5,7 +5,7 @@ let pollTimer = null;
 
 const fieldData = {
   apiBaseUrl: 'https://ni-1.onrender.com',
-  channel: 'xyzgx',
+  channel: 'icarolinaporto',
   timezone: 'America/Sao_Paulo',
   pollSeconds: 10,
   showTestOnLoad: false,
@@ -35,14 +35,14 @@ function showAlert(item) {
   const safeMessage = item.message || '🎂 Feliz aniversário!';
   const safeChannel = item.channel || fieldData.channel;
   const safeTime = item.time || 'agora';
-  const avatarHtml = item.avatarUrl
-    ? `<img class="birthday-se-avatar" src="${item.avatarUrl}" alt="avatar" referrerpolicy="no-referrer">`
-    : '';
+  const avatarUrl = item.avatarUrl && String(item.avatarUrl).trim()
+    ? item.avatarUrl
+    : 'https://static-cdn.jtvnw.net/user-default-pictures-uv/215b7342-def9-11e9-9a66-784f43822e80-profile_image-300x300.png';
 
   const el = document.createElement('div');
   el.className = 'birthday-se-alert';
   el.innerHTML = `
-    ${avatarHtml}
+    <img class="birthday-se-avatar" src="${avatarUrl}" alt="avatar" referrerpolicy="no-referrer">
     <div>
       <div class="birthday-se-emoji">🎂🎉</div>
       <div class="birthday-se-title">${safeMessage}</div>
