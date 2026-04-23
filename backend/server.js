@@ -32,13 +32,17 @@ let twitchAppTokenCache = { token: '', expiresAt: 0 };
 
 function ensureDb() {
   if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ birthdays: [], firedAlerts: [] }, null, 2));
+    fs.writeFileSync(DB_FILE, JSON.stringify({ birthdays: [], firedAlerts: [], testAlerts: [] }, null, 2));
   }
 }
 
 function readDb() {
   ensureDb();
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  if (!Array.isArray(data.birthdays)) data.birthdays = [];
+  if (!Array.isArray(data.firedAlerts)) data.firedAlerts = [];
+  if (!Array.isArray(data.testAlerts)) data.testAlerts = [];
+  return data;
 }
 
 function writeDb(data) {
@@ -230,6 +234,22 @@ async function upsertBirthday({ channel, username, month, day, hour, minute, tim
   return db.birthdays.find(item => item.channel === channel && item.username === username);
 }
 
+
+
+function queueTestAlert({ channel, username = 'testeviewer', timezone = DEFAULT_TIMEZONE, message = '🎂 TESTE MANUAL DO ALERTA', avatarUrl = DEFAULT_AVATAR_URL }) {
+  const db = readDb();
+  db.testAlerts.push({
+    id: crypto.randomUUID(),
+    channel,
+    username,
+    timezone,
+    message,
+    avatarUrl,
+    createdAt: new Date().toISOString()
+  });
+  writeDb(db);
+}
+
 function deleteBirthday(channel, username) {
   const db = readDb();
   db.birthdays = db.birthdays.filter(item => !(item.channel === channel && item.username === username));
@@ -271,6 +291,20 @@ app.get('/api/register', async (req, res) => {
   });
 
   return res.send(buildChatResponse(channel, username, `${String(date.day).padStart(2, '0')}/${String(date.month).padStart(2, '0')}`, `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`));
+});
+
+
+
+app.get('/api/test-alert', (req, res) => {
+  const channel = normalizeChannel(req.query.channel);
+  const username = normalizeUsername(req.query.user || req.query.username || 'testeviewer');
+  const timezone = String(req.query.timezone || DEFAULT_TIMEZONE).trim();
+  const message = clipTemplate(req.query.message || '🎂 TESTE MANUAL DO ALERTA');
+  const avatarUrl = String(req.query.avatarUrl || DEFAULT_AVATAR_URL || '').trim();
+  if (!channel) return res.status(400).send('Faltou o canal.');
+  if (!isValidTimezone(timezone)) return res.status(400).send('Timezone inválida.');
+  queueTestAlert({ channel, username, timezone, message, avatarUrl });
+  return res.send(`Teste enfileirado para @${channel}.`);
 });
 
 app.get('/api/birthdays', (req, res) => {
@@ -342,6 +376,20 @@ app.get('/api/overlay/alerts', (req, res) => {
   const db = readDb();
   const due = [];
 
+  for (const testRow of db.testAlerts.filter(item => item.channel === channel)) {
+    due.push({
+      id: testRow.id,
+      channel: testRow.channel,
+      username: testRow.username,
+      usernameDisplay: testRow.username,
+      date: `${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')}`,
+      time: `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`,
+      timezone: testRow.timezone || timezone,
+      message: testRow.message || '🎂 TESTE MANUAL DO ALERTA',
+      avatarUrl: testRow.avatarUrl || DEFAULT_AVATAR_URL
+    });
+  }
+
   for (const row of db.birthdays.filter(item => item.channel === channel && item.month === parts.month && item.day === parts.day)) {
     const targetMinutes = minutesSinceMidnight(row.hour, row.minute);
     const fired = db.firedAlerts.some(item => item.channel === row.channel && item.username === row.username && item.year === parts.year);
@@ -364,7 +412,10 @@ app.get('/api/overlay/alerts', (req, res) => {
     }
   }
 
-  if (!dryRun) writeDb(db);
+  if (!dryRun) {
+    db.testAlerts = db.testAlerts.filter(item => item.channel !== channel);
+    writeDb(db);
+  }
 
   res.json({
     serverTime: `${String(parts.day).padStart(2, '0')}/${String(parts.month).padStart(2, '0')} ${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`,
@@ -399,6 +450,10 @@ app.get('/overlay', (_req, res) => {
 
 app.get('/admin', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+app.get('/', (_req, res) => {
+  res.type('text/plain').send('Birthday Live Alert online. Use /overlay, /admin, /health ou /api/test-alert?channel=SEU_CANAL');
 });
 
 app.listen(PORT, () => {
