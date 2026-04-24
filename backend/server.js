@@ -141,24 +141,33 @@ app.get('/api/register', async (req, res) => {
   const time = parseTimeStr(req.query.time);
   const manualAvatarUrl = String(req.query.avatarUrl || '').trim();
   const messageTemplate = String(req.query.message || '').trim() || DEFAULT_MESSAGE_TEMPLATE;
-  if (!channel) return res.status(400).json({ ok: false, error: 'channel obrigatório' });
-  if (!username) return res.status(400).json({ ok: false, error: 'user obrigatório' });
-  if (!date) return res.status(400).json({ ok: false, error: 'date inválida, use DD/MM' });
-  if (!time) return res.status(400).json({ ok: false, error: 'time inválida, use HH:MM' });
+
+  if (!channel) return res.type('text/plain; charset=utf-8').send('Uso: canal obrigatório.');
+  if (!username) return res.type('text/plain; charset=utf-8').send('Uso: usuário obrigatório.');
+  if (!date) return res.type('text/plain; charset=utf-8').send('Uso: data inválida, use DD/MM.');
+  if (!time) return res.type('text/plain; charset=utf-8').send('Uso: hora inválida, use HH:MM.');
 
   const avatarUrl = manualAvatarUrl || await fetchTwitchAvatar(username);
   const db = loadDb();
   cleanupDb(db);
+
   const item = {
-    id: uid('reg'), channel, username,
-    date: date.normalized, time: time.normalized,
+    id: uid('reg'),
+    channel,
+    username,
+    date: date.normalized,
+    time: time.normalized,
     avatarUrl: sanitizeAvatarUrl(avatarUrl),
     messageTemplate,
     createdAt: new Date().toISOString()
   };
+
   db.registrations.push(item);
   saveDb(db);
-  return res.json({ ok: true, saved: item, chatMessage: `Aniversário de ${username} salvo para ${date.normalized} às ${time.normalized}.` });
+
+  return res
+    .type('text/plain; charset=utf-8')
+    .send(`Aniversário adicionado no canal ${channel} para o dia ${date.normalized} às ${time.normalized}`);
 });
 
 app.get('/api/test-alert', async (req, res) => {
