@@ -1,29 +1,21 @@
-# Birthday Live Alert v2
+# Birthday Live Alert v4 — painel persistente
 
-Projeto para Twitch com:
-- comando `!niver DD/MM HH:MM`
-- multi-canal no mesmo backend
-- mensagem personalizada com `{nick}`
-- avatar no alerta
-- widget para StreamElements
-- painel admin
+Sistema de aniversários para Twitch/StreamElements com:
 
-## Estrutura
+- painel em `/admin`;
+- adicionar, editar, excluir, ativar e desativar aniversários;
+- busca e filtro por canal;
+- teste individual no widget;
+- backup e restauração em JSON;
+- persistência em PostgreSQL externo;
+- comando `!niver DD/MM HH:MM`;
+- múltiplos canais no mesmo backend.
 
-- `backend/` -> vai para Render/Railway
-- `streamelements-widget/` -> colar no Custom Widget do StreamElements
+## Por que os dados não somem ao trocar de Render
 
-## Repositório
+O painel usa a variável `DATABASE_URL`. Ela aponta para um banco PostgreSQL separado do Render. Você pode trocar o serviço, apagar o deploy ou mudar a URL do backend: basta usar a mesma `DATABASE_URL` no novo serviço.
 
-Suba **as duas pastas no mesmo repositório**.
-
-## Importante sobre GitHub
-
-Não suba `node_modules`.
-
-Se estiver usando upload pelo navegador do GitHub e aparecer que são arquivos demais, use:
-- GitHub Desktop, ou
-- arraste só esta estrutura limpa do projeto
+Sem `DATABASE_URL`, o sistema entra em modo local apenas para teste e mostra um aviso amarelo no painel. O modo local não garante permanência em hospedagem gratuita.
 
 ## Deploy no Render
 
@@ -31,84 +23,49 @@ Se estiver usando upload pelo navegador do GitHub e aparecer que são arquivos d
 - Build Command: `npm install`
 - Start Command: `npm start`
 
-### Variáveis de ambiente
+Variáveis obrigatórias:
 
-Crie no Render:
+```text
+APP_BASE_URL=https://SEU-SERVICO.onrender.com
+ADMIN_KEY=SUA-SENHA-DO-PAINEL
+DATABASE_URL=postgresql://usuario:senha@host:5432/banco
+DATABASE_SSL=true
+DEFAULT_TIMEZONE=America/Sao_Paulo
+```
 
-- `APP_BASE_URL` = URL final do app no Render
-- `ADMIN_KEY` = sua senha do painel
-- `DEFAULT_TIMEZONE` = `America/Sao_Paulo`
-- `DEFAULT_MESSAGE_TEMPLATE` = `🎉 Feliz aniversário, {nick}!`
-- `TWITCH_CLIENT_ID` = seu Client ID da Twitch
-- `TWITCH_CLIENT_SECRET` = seu Client Secret da Twitch
+Para usar Supabase, Neon, Railway PostgreSQL ou outro PostgreSQL externo, copie a connection string completa para `DATABASE_URL`.
 
-Os dois últimos são os que permitem buscar automaticamente a foto de perfil do usuário pela API da Twitch. A Twitch usa o endpoint Get Users para retornar dados do usuário, incluindo `profile_image_url`. citeturn925765search0turn925765search3
+Variáveis opcionais para buscar avatar real da Twitch:
+
+```text
+TWITCH_CLIENT_ID=...
+TWITCH_CLIENT_SECRET=...
+```
+
+## Abrir o painel
+
+```text
+https://SEU-SERVICO.onrender.com/admin
+```
+
+Digite a senha definida em `ADMIN_KEY`.
 
 ## StreamElements
 
-O Custom Widget aceita HTML, CSS, JS e pode buscar dados por HTTP API. O chatbot também aceita `$(customapi)` para chamar API externa. citeturn925765search1turn925765search2
+No Custom Widget, mantenha `apiBaseUrl` apontando para a URL atual do backend. Ao trocar de Render, você só precisa trocar essa URL no Fields do widget. Os aniversários permanecem no PostgreSQL.
 
-### Comando `!niver`
-
-Crie um comando custom no StreamElements com a resposta:
+Comando personalizado:
 
 ```text
-$(customapi https://SEU-BACKEND.com/api/register?channel=$(channel)&user=$(user)&date=$(1)&time=$(2))
+$(customapi https://SEU-SERVICO.onrender.com/api/register?channel=$(channel)&user=$(user)&date=$(1)&time=$(2))
 ```
 
-Exemplo no chat:
+Exemplo:
 
 ```text
 !niver 12/08 09:30
 ```
 
-### Widget
+## Backup extra
 
-No StreamElements, crie um **Custom Widget** e cole:
-- `widget.html` em HTML
-- `widget.css` em CSS
-- `widget.js` em JS
-- `widget.json` em Fields
-
-Depois configure:
-- `apiBaseUrl` = sua URL do Render
-- `channel` = nome do canal Twitch onde o widget vai rodar
-- `timezone` = `America/Sao_Paulo`
-
-## Mensagem personalizada
-
-No painel admin ou via variável de ambiente, use placeholders:
-- `{nick}`
-- `{channel}`
-- `{date}`
-- `{time}`
-
-Exemplo:
-
-```text
-🎂 Hoje é o dia do {nick}! Feliz aniversário!
-```
-
-## Painel admin
-
-Abra:
-
-```text
-https://SEU-BACKEND.com/admin?key=SUA_CHAVE
-```
-
-Você pode filtrar por canal:
-
-```text
-https://SEU-BACKEND.com/admin?key=SUA_CHAVE&channel=nomedocanal
-```
-
-## Overlay direto pelo backend
-
-Também existe uma rota pronta:
-
-```text
-https://SEU-BACKEND.com/overlay?channel=nomedocanal&timezone=America/Sao_Paulo
-```
-
-Mas para Twitch o ideal é usar o Custom Widget do StreamElements.
+No painel, use **Baixar backup** para guardar uma cópia JSON. **Restaurar** permite juntar com a lista atual ou substituí-la.

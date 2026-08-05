@@ -1,129 +1,100 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Painel Birthday Live Alert</title>
-  <style>
-    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #111318; color: #fff; padding: 24px; }
-    .wrap { max-width: 1100px; margin: 0 auto; }
-    .card { background: #1a1f29; border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 20px; margin-bottom: 20px; }
-    h1, h2 { margin-top: 0; }
-    form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    input, textarea, button { padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); font-size: 15px; }
-    input, textarea { background: #0f131b; color: #fff; }
-    textarea { min-height: 92px; resize: vertical; }
-    button { background: #ff4fb3; color: #fff; cursor: pointer; font-weight: 700; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; vertical-align: top; }
-    .danger { background: #7b2136; }
-    .muted { color: #bfc6d4; font-size: 14px; }
-    .full { grid-column: 1 / -1; }
-    img.avatar { width: 48px; height: 48px; object-fit: cover; border-radius: 999px; background: #0f131b; }
-    code { word-break: break-all; }
-    @media (max-width: 900px) { form { grid-template-columns: 1fr; } }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Painel de aniversários</title>
+  <link rel="stylesheet" href="/admin.css">
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>Birthday Live Alert</h1>
-      <p class="muted">Abra com <code>/admin?key=SUA_CHAVE</code>. Este painel já está preparado para vários canais Twitch no mesmo backend.</p>
-    </div>
+  <div id="toast" class="toast" aria-live="polite"></div>
 
-    <div class="card">
-      <h2>Adicionar ou atualizar</h2>
-      <form id="form">
-        <input name="channel" placeholder="canal_twitch" required />
-        <input name="username" placeholder="viewer" required />
-        <input name="date" placeholder="12/08" required />
-        <input name="time" placeholder="09:30" required />
-        <input name="timezone" placeholder="America/Sao_Paulo" value="America/Sao_Paulo" required />
-        <input name="avatarUrl" placeholder="Avatar manual (opcional)" />
-        <textarea class="full" name="messageTemplate" placeholder="Mensagem. Use {nick}, {channel}, {date}, {time}.">🎉 Feliz aniversário, {nick}!</textarea>
-        <button type="submit">Salvar</button>
-      </form>
-      <p id="status" class="muted"></p>
-    </div>
+  <section id="loginView" class="login-shell">
+    <form id="loginForm" class="login-card">
+      <div class="logo">🎂</div>
+      <h1>Painel de aniversários</h1>
+      <p>Digite a senha configurada em <code>ADMIN_KEY</code>.</p>
+      <label>Senha do painel<input id="adminKeyInput" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit">Entrar</button>
+      <div id="loginError" class="form-error"></div>
+    </form>
+  </section>
 
-    <div class="card">
-      <h2>Lista</h2>
-      <p class="muted">Filtre por canal com <code>?key=SUA_CHAVE&amp;channel=nomedocanal</code>.</p>
-      <table>
-        <thead>
-          <tr>
-            <th>Avatar</th>
-            <th>Canal</th>
-            <th>Viewer</th>
-            <th>Data</th>
-            <th>Hora</th>
-            <th>Mensagem</th>
-            <th>Ação</th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </div>
+  <main id="appView" class="app hidden">
+    <header class="topbar">
+      <div><span class="brand-icon">🎂</span><strong>Aniversários</strong></div>
+      <div class="top-actions">
+        <span id="storageBadge" class="badge"></span>
+        <button id="logoutBtn" class="ghost">Sair</button>
+      </div>
+    </header>
 
-  <script>
-    const params = new URLSearchParams(location.search);
-    const key = params.get('key');
-    const channelFilter = (params.get('channel') || '').trim();
-    const statusEl = document.getElementById('status');
-    const rowsEl = document.getElementById('rows');
-    const form = document.getElementById('form');
+    <section class="summary-grid">
+      <article><span>Total</span><strong id="totalCount">0</strong></article>
+      <article><span>Ativos</span><strong id="enabledCount">0</strong></article>
+      <article><span>Próximo</span><strong id="nextBirthday">—</strong></article>
+    </section>
 
-    if (!key) {
-      statusEl.textContent = 'Falta ?key=SUA_CHAVE na URL.';
-    }
+    <section id="storageWarning" class="warning hidden">
+      <strong>Os dados ainda não estão persistentes.</strong>
+      Configure <code>DATABASE_URL</code> com um PostgreSQL externo antes de usar em produção.
+    </section>
 
-    async function load() {
-      const url = new URL('/api/birthdays', location.origin);
-      url.searchParams.set('key', key || '');
-      if (channelFilter) url.searchParams.set('channel', channelFilter);
-      const res = await fetch(url);
-      const data = await res.json();
-      rowsEl.innerHTML = '';
-      for (const item of data.items || []) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${item.avatarUrl ? `<img class="avatar" src="${item.avatarUrl}" alt="avatar">` : ''}</td>
-          <td>${item.channel}</td>
-          <td>${item.username}</td>
-          <td>${item.date}</td>
-          <td>${item.time}</td>
-          <td>${item.messageTemplate}</td>
-          <td><button class="danger" data-channel="${item.channel}" data-user="${item.username}">Apagar</button></td>
-        `;
-        rowsEl.appendChild(tr);
-      }
-      rowsEl.querySelectorAll('button').forEach(button => {
-        button.addEventListener('click', async () => {
-          await fetch(`/api/birthdays/${encodeURIComponent(button.dataset.channel)}/${encodeURIComponent(button.dataset.user)}?key=${encodeURIComponent(key)}`, { method: 'DELETE' });
-          load();
-        });
-      });
-    }
+    <section class="toolbar card">
+      <div class="filters">
+        <input id="searchInput" type="search" placeholder="Buscar nick, canal ou mensagem">
+        <input id="channelFilter" type="text" placeholder="Filtrar canal">
+      </div>
+      <div class="toolbar-actions">
+        <button id="backupBtn" class="secondary">Baixar backup</button>
+        <button id="restoreBtn" class="secondary">Restaurar</button>
+        <input id="restoreInput" class="hidden" type="file" accept="application/json,.json">
+        <button id="newBtn" class="primary">+ Adicionar aniversário</button>
+      </div>
+    </section>
 
-    form.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const body = Object.fromEntries(new FormData(form).entries());
-      const res = await fetch(`/api/birthdays?key=${encodeURIComponent(key)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) {
-        statusEl.textContent = 'Erro ao salvar.';
-        return;
-      }
-      statusEl.textContent = 'Salvo com sucesso.';
-      load();
-    });
+    <section class="card table-card">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pessoa</th><th>Canal</th><th>Data</th><th>Hora</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody id="birthdayRows"></tbody>
+        </table>
+      </div>
+      <div id="emptyState" class="empty hidden">Nenhum aniversário cadastrado.</div>
+    </section>
+  </main>
 
-    if (channelFilter) form.channel.value = channelFilter;
-    load();
-  </script>
+  <dialog id="editorDialog">
+    <form id="birthdayForm" class="dialog-card">
+      <div class="dialog-head">
+        <div><h2 id="dialogTitle">Adicionar aniversário</h2><p>Todos os campos podem ser alterados depois.</p></div>
+        <button id="closeDialogBtn" class="icon-button" type="button" aria-label="Fechar">×</button>
+      </div>
+      <input id="birthdayId" type="hidden">
+      <div class="form-grid">
+        <label>Nick<input id="usernameInput" required maxlength="80" placeholder="exemplo"></label>
+        <label>Canal<input id="channelInput" required maxlength="80" placeholder="meucanal"></label>
+        <label>Data (DD/MM)<input id="dateInput" required inputmode="numeric" maxlength="5" placeholder="25/12"></label>
+        <label>Hora (HH:MM)<input id="timeInput" required type="time" value="00:00"></label>
+        <label class="wide">URL do avatar <span>(opcional)</span><input id="avatarInput" type="url" placeholder="Deixe vazio para buscar na Twitch"></label>
+        <label class="wide">Mensagem<textarea id="messageInput" rows="3" required>🎉 Feliz aniversário, {nick}!</textarea><small>Variáveis: {nick}, {channel}, {date}, {time}</small></label>
+        <label class="switch-line wide"><input id="enabledInput" type="checkbox" checked><span>Alerta ativo</span></label>
+      </div>
+      <div class="dialog-actions">
+        <button id="cancelBtn" class="ghost" type="button">Cancelar</button>
+        <button id="saveBtn" class="primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmDialog">
+    <form method="dialog" class="confirm-card">
+      <h2>Excluir aniversário?</h2>
+      <p id="confirmText"></p>
+      <div class="dialog-actions"><button value="cancel" class="ghost">Cancelar</button><button value="confirm" class="danger">Excluir</button></div>
+    </form>
+  </dialog>
+
+  <script src="/admin.js" defer></script>
 </body>
 </html>

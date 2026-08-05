@@ -1,13 +1,16 @@
 {
   "name": "birthday-live-alert",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "check": "node --check server.js && node --check storage.js && node --check public/admin.js"
   },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "pg": "^8.13.1"
   }
 }
