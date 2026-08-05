@@ -2,7 +2,7 @@ const state = { key: localStorage.getItem('birthdayAdminKey') || '', items: [], 
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries([
   'loginView','appView','loginForm','adminKeyInput','loginError','logoutBtn','storageBadge','storageWarning',
-  'totalCount','enabledCount','nextBirthday','searchInput','channelFilter','backupBtn','restoreBtn','restoreInput',
+  'totalCount','enabledCount','nextBirthday','searchInput','channelFilter','backupBtn','restoreBtn','refreshAvatarsBtn','restoreInput',
   'newBtn','birthdayRows','emptyState','editorDialog','birthdayForm','dialogTitle','closeDialogBtn','birthdayId',
   'usernameInput','channelInput','dateInput','timeInput','avatarInput','messageInput','enabledInput','cancelBtn','saveBtn',
   'confirmDialog','confirmText','toast'
@@ -194,6 +194,23 @@ async function downloadBackup() {
   } catch (error) { toast(error.message, true); }
 }
 
+
+async function refreshAvatars() {
+  els.refreshAvatarsBtn.disabled = true;
+  const originalText = els.refreshAvatarsBtn.textContent;
+  els.refreshAvatarsBtn.textContent = 'Buscando fotos...';
+  try {
+    const result = await api('/api/admin/avatars/refresh', { method: 'POST', body: '{}' });
+    toast(`${result.updated} foto(s) atualizada(s); ${result.failed} não encontrada(s).`);
+    await loadItems();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    els.refreshAvatarsBtn.disabled = false;
+    els.refreshAvatarsBtn.textContent = originalText;
+  }
+}
+
 async function restoreBackup(file) {
   try {
     const backup = JSON.parse(await file.text());
@@ -214,6 +231,7 @@ els.birthdayForm.addEventListener('submit', saveBirthday);
 els.dateInput.addEventListener('input', () => { els.dateInput.value = formatDateInput(els.dateInput.value); });
 els.backupBtn.addEventListener('click', downloadBackup);
 els.restoreBtn.addEventListener('click', () => els.restoreInput.click());
+els.refreshAvatarsBtn.addEventListener('click', refreshAvatars);
 els.restoreInput.addEventListener('change', () => els.restoreInput.files[0] && restoreBackup(els.restoreInput.files[0]));
 let filterTimer;
 [els.searchInput, els.channelFilter].forEach((input) => input.addEventListener('input', () => { clearTimeout(filterTimer); filterTimer = setTimeout(() => loadItems().catch((e) => toast(e.message, true)), 250); }));

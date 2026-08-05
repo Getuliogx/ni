@@ -48,6 +48,7 @@
       <div class="toolbar-actions">
         <button id="backupBtn" class="secondary">Baixar backup</button>
         <button id="restoreBtn" class="secondary">Restaurar</button>
+        <button id="refreshAvatarsBtn" class="secondary">Atualizar fotos</button>
         <input id="restoreInput" class="hidden" type="file" accept="application/json,.json">
         <button id="newBtn" class="primary">+ Adicionar aniversário</button>
       </div>
@@ -76,7 +77,7 @@
         <label>Canal<input id="channelInput" required maxlength="80" placeholder="meucanal"></label>
         <label>Data (DD/MM)<input id="dateInput" required inputmode="numeric" maxlength="5" placeholder="25/12"></label>
         <label>Hora (HH:MM)<input id="timeInput" required type="time" value="00:00"></label>
-        <label class="wide">URL do avatar <span>(opcional)</span><input id="avatarInput" type="url" placeholder="Deixe vazio para buscar na Twitch"></label>
+        <label class="wide">URL do avatar <span>(opcional)</span><input id="avatarInput" type="url" placeholder="Deixe vazio para buscar a foto pública da Twitch"></label>
         <label class="wide">Mensagem<textarea id="messageInput" rows="3" required>🎉 Feliz aniversário, {nick}!</textarea><small>Variáveis: {nick}, {channel}, {date}, {time}</small></label>
         <label class="switch-line wide"><input id="enabledInput" type="checkbox" checked><span>Alerta ativo</span></label>
       </div>

@@ -1,4 +1,4 @@
-# Birthday Live Alert v4 — painel persistente
+# Birthday Live Alert v5 — painel persistente + fotos sem credenciais
 
 Sistema de aniversários para Twitch/StreamElements com:
 
@@ -9,7 +9,9 @@ Sistema de aniversários para Twitch/StreamElements com:
 - backup e restauração em JSON;
 - persistência em PostgreSQL externo;
 - comando `!niver DD/MM HH:MM`;
-- múltiplos canais no mesmo backend.
+- múltiplos canais no mesmo backend;
+- busca automática da foto pública do nick sem `TWITCH_CLIENT_ID` e sem `TWITCH_CLIENT_SECRET`;
+- botão **Atualizar fotos** para corrigir cadastros antigos.
 
 ## Por que os dados não somem ao trocar de Render
 
@@ -35,12 +37,11 @@ DEFAULT_TIMEZONE=America/Sao_Paulo
 
 Para usar Supabase, Neon, Railway PostgreSQL ou outro PostgreSQL externo, copie a connection string completa para `DATABASE_URL`.
 
-Variáveis opcionais para buscar avatar real da Twitch:
+## Fotos da Twitch sem credenciais
 
-```text
-TWITCH_CLIENT_ID=...
-TWITCH_CLIENT_SECRET=...
-```
+Não é necessário configurar `TWITCH_CLIENT_ID` nem `TWITCH_CLIENT_SECRET`. O backend tenta localizar a foto pública do nick pela página pública da Twitch e usa serviços públicos alternativos apenas como reserva. Isso funciona mesmo quando o canal pertence a outra pessoa.
+
+Para corrigir registros antigos que ficaram com o boneco amarelo, abra o painel e clique em **Atualizar fotos**.
 
 ## Abrir o painel
 

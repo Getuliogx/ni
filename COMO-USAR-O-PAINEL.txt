@@ -27,3 +27,8 @@ O painel também tem os botões Baixar backup e Restaurar.
 IMPORTANTE:
 Sem DATABASE_URL, o painel funciona em modo local para teste, mas os dados podem
 ser apagados pela hospedagem. O próprio painel mostra um aviso amarelo nesse caso.
+
+FOTOS DA TWITCH:
+- Não precisa de TWITCH_CLIENT_ID nem TWITCH_CLIENT_SECRET.
+- O nick é buscado publicamente. O canal pode ser de outra pessoa.
+- Depois do deploy, clique em "Atualizar fotos" para corrigir cadastros antigos.

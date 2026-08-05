@@ -17,7 +17,7 @@ services:
         value: America/Sao_Paulo
       - key: APP_BASE_URL
         sync: false
-      - key: TWITCH_CLIENT_ID
-        sync: false
-      - key: TWITCH_CLIENT_SECRET
-        sync: false
+      - key: AVATAR_LOOKUP_TIMEOUT_MS
+        value: "7000"
+      - key: AVATAR_CACHE_HOURS
+        value: "6"

@@ -27,8 +27,8 @@ const DEFAULT_TIMEZONE = process.env.DEFAULT_TIMEZONE || 'America/Sao_Paulo';
 const DEFAULT_MESSAGE_TEMPLATE = process.env.DEFAULT_MESSAGE_TEMPLATE || '🎉 Feliz aniversário, {nick}!';
 const RECENT_ALERT_SECONDS = Number(process.env.RECENT_ALERT_SECONDS || 20);
 const DEFAULT_AVATAR_URL = process.env.DEFAULT_AVATAR_URL || 'https://static-cdn.jtvnw.net/user-default-pictures-uv/215b7342-def9-11e9-9a66-784f43822e80-profile_image-300x300.png';
-const TWITCH_CLIENT_ID = String(process.env.TWITCH_CLIENT_ID || '').trim();
-const TWITCH_CLIENT_SECRET = String(process.env.TWITCH_CLIENT_SECRET || '').trim();
+const AVATAR_LOOKUP_TIMEOUT_MS = Number(process.env.AVATAR_LOOKUP_TIMEOUT_MS || 7000);
+const AVATAR_CACHE_HOURS = Number(process.env.AVATAR_CACHE_HOURS || 6);
 
 const app = express();
 app.disable('x-powered-by');
@@ -36,7 +36,7 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-let twitchTokenCache = { accessToken: '', expiresAt: 0 };
+const avatarCache = new Map();
 
 function uid(prefix = 'id') {
   return `${prefix}_${Date.now()}_${crypto.randomBytes(5).toString('hex')}`;
@@ -127,42 +127,108 @@ function validateBirthdayBody(body = {}) {
   };
 }
 
-async function getTwitchAppToken() {
-  if (!TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) return null;
-  const now = Date.now();
-  if (twitchTokenCache.accessToken && twitchTokenCache.expiresAt > now + 15000) return twitchTokenCache.accessToken;
-  const tokenUrl = new URL('https://id.twitch.tv/oauth2/token');
-  tokenUrl.searchParams.set('client_id', TWITCH_CLIENT_ID);
-  tokenUrl.searchParams.set('client_secret', TWITCH_CLIENT_SECRET);
-  tokenUrl.searchParams.set('grant_type', 'client_credentials');
-  const response = await fetch(tokenUrl, { method: 'POST' });
-  if (!response.ok) throw new Error(`Twitch token: HTTP ${response.status}`);
-  const data = await response.json();
-  twitchTokenCache = {
-    accessToken: data.access_token || '',
-    expiresAt: now + Math.max(0, Number(data.expires_in || 0) - 60) * 1000,
-  };
-  return twitchTokenCache.accessToken || null;
+function decodeHtmlEntities(value = '') {
+  return String(value)
+    .replaceAll('&amp;', '&')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>');
 }
 
-async function fetchTwitchAvatar(login = '') {
-  const normalizedLogin = normalizeUser(login).toLowerCase();
-  if (!normalizedLogin || !TWITCH_CLIENT_ID || !TWITCH_CLIENT_SECRET) return DEFAULT_AVATAR_URL;
+function isRealAvatarUrl(value = '') {
+  const url = String(value || '').trim();
+  if (!url) return false;
   try {
-    const accessToken = await getTwitchAppToken();
-    if (!accessToken) return DEFAULT_AVATAR_URL;
-    const usersUrl = new URL('https://api.twitch.tv/helix/users');
-    usersUrl.searchParams.set('login', normalizedLogin);
-    const response = await fetch(usersUrl, {
-      headers: { 'Client-Id': TWITCH_CLIENT_ID, Authorization: `Bearer ${accessToken}` },
-    });
-    if (!response.ok) throw new Error(`Twitch users: HTTP ${response.status}`);
-    const data = await response.json();
-    return sanitizeAvatarUrl(data?.data?.[0]?.profile_image_url);
-  } catch (error) {
-    console.error('Falha ao buscar avatar Twitch:', error.message);
-    return DEFAULT_AVATAR_URL;
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    const lower = parsed.toString().toLowerCase();
+    return !lower.includes('user-default-pictures')
+      && !lower.includes('404_preview')
+      && !lower.includes('/default-')
+      && !lower.includes('placeholder');
+  } catch {
+    return false;
   }
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AVATAR_LOOKUP_TIMEOUT_MS);
+  try {
+    return await fetch(url, { redirect: 'follow', ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractProfileImageFromHtml(html = '') {
+  const metaTags = String(html).match(/<meta\b[^>]*>/gi) || [];
+  for (const tag of metaTags) {
+    const property = tag.match(/(?:property|name)=["']([^"']+)["']/i)?.[1]?.toLowerCase();
+    if (!['og:image', 'twitter:image', 'twitter:image:src'].includes(property)) continue;
+    const content = tag.match(/content=["']([^"']+)["']/i)?.[1];
+    const decoded = decodeHtmlEntities(content || '');
+    if (isRealAvatarUrl(decoded)) return decoded;
+  }
+  return '';
+}
+
+async function avatarFromTwitchProfilePage(login) {
+  const response = await fetchWithTimeout(`https://www.twitch.tv/${encodeURIComponent(login)}`, {
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/151 Safari/537.36',
+    },
+  });
+  if (!response.ok) return '';
+  return extractProfileImageFromHtml(await response.text());
+}
+
+async function avatarFromDecapi(login) {
+  const response = await fetchWithTimeout(`https://decapi.me/twitch/avatar/${encodeURIComponent(login)}`, {
+    headers: { Accept: 'text/plain' },
+  });
+  if (!response.ok) return '';
+  const value = (await response.text()).trim();
+  return isRealAvatarUrl(value) ? value : '';
+}
+
+async function avatarFromIvr(login) {
+  const url = new URL('https://api.ivr.fi/v2/twitch/user');
+  url.searchParams.set('login', login);
+  const response = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } });
+  if (!response.ok) return '';
+  const data = await response.json();
+  const user = Array.isArray(data) ? data[0] : data;
+  const value = user?.logo || user?.profileImageURL || user?.profile_image_url || '';
+  return isRealAvatarUrl(value) ? value : '';
+}
+
+async function fetchTwitchAvatar(login = '', { force = false } = {}) {
+  const normalizedLogin = normalizeUser(login).toLowerCase();
+  if (!normalizedLogin) return '';
+
+  const cached = avatarCache.get(normalizedLogin);
+  if (!force && cached && cached.expiresAt > Date.now()) return cached.url;
+
+  const sources = [avatarFromTwitchProfilePage, avatarFromDecapi, avatarFromIvr];
+  for (const source of sources) {
+    try {
+      const avatarUrl = await source(normalizedLogin);
+      if (!avatarUrl) continue;
+      avatarCache.set(normalizedLogin, {
+        url: avatarUrl,
+        expiresAt: Date.now() + Math.max(1, AVATAR_CACHE_HOURS) * 60 * 60 * 1000,
+      });
+      return avatarUrl;
+    } catch (error) {
+      console.error(`Falha em ${source.name} para ${normalizedLogin}:`, error.message);
+    }
+  }
+
+  avatarCache.set(normalizedLogin, { url: '', expiresAt: Date.now() + 10 * 60 * 1000 });
+  return '';
 }
 
 app.get('/', (_req, res) => {
@@ -189,7 +255,7 @@ app.get('/api/register', async (req, res, next) => {
       avatarUrl: req.query.avatarUrl,
       messageTemplate: req.query.message,
     });
-    if (!String(req.query.avatarUrl || '').trim()) data.avatarUrl = await fetchTwitchAvatar(data.username);
+    if (!String(req.query.avatarUrl || '').trim()) data.avatarUrl = (await fetchTwitchAvatar(data.username)) || DEFAULT_AVATAR_URL;
     const item = await createBirthday({ id: uid('reg'), ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     res.type('text/plain; charset=utf-8').send(`Aniversário de ${item.username} adicionado para ${item.date} às ${item.time}.`);
   } catch (error) {
@@ -211,7 +277,7 @@ app.get('/api/admin/birthdays', requireAdmin, async (req, res) => {
 app.post('/api/admin/birthdays', requireAdmin, async (req, res, next) => {
   try {
     const data = validateBirthdayBody(req.body);
-    if (!String(req.body.avatarUrl || '').trim()) data.avatarUrl = await fetchTwitchAvatar(data.username);
+    if (!String(req.body.avatarUrl || '').trim()) data.avatarUrl = (await fetchTwitchAvatar(data.username)) || DEFAULT_AVATAR_URL;
     const now = new Date().toISOString();
     const item = await createBirthday({ id: uid('reg'), ...data, createdAt: now, updatedAt: now });
     res.status(201).json({ ok: true, item });
@@ -224,7 +290,7 @@ app.post('/api/admin/birthdays', requireAdmin, async (req, res, next) => {
 app.put('/api/admin/birthdays/:id', requireAdmin, async (req, res, next) => {
   try {
     const data = validateBirthdayBody(req.body);
-    if (!String(req.body.avatarUrl || '').trim()) data.avatarUrl = await fetchTwitchAvatar(data.username);
+    if (!String(req.body.avatarUrl || '').trim()) data.avatarUrl = (await fetchTwitchAvatar(data.username)) || DEFAULT_AVATAR_URL;
     const item = await updateBirthday(req.params.id, data);
     if (!item) return res.status(404).json({ ok: false, error: 'Aniversário não encontrado.' });
     res.json({ ok: true, item });
@@ -263,6 +329,29 @@ app.post('/api/admin/birthdays/:id/test', requireAdmin, async (req, res) => {
   res.json({ ok: true, alert });
 });
 
+app.post('/api/admin/avatars/refresh', requireAdmin, async (_req, res) => {
+  const items = await listBirthdays();
+  let updated = 0;
+  let unchanged = 0;
+  let failed = 0;
+
+  for (const item of items) {
+    const avatarUrl = await fetchTwitchAvatar(item.username, { force: true });
+    if (!avatarUrl) {
+      failed += 1;
+      continue;
+    }
+    if (avatarUrl === item.avatarUrl) {
+      unchanged += 1;
+      continue;
+    }
+    await updateBirthday(item.id, { avatarUrl });
+    updated += 1;
+  }
+
+  res.json({ ok: true, total: items.length, updated, unchanged, failed });
+});
+
 app.get('/api/admin/backup', requireAdmin, async (_req, res) => {
   const backup = await exportData();
   const stamp = new Date().toISOString().slice(0, 10);
@@ -287,7 +376,7 @@ app.get('/api/test-alert', async (req, res) => {
   const nowLocal = nowInTimezone(String(req.query.timezone || DEFAULT_TIMEZONE));
   const date = `${String(nowLocal.day).padStart(2, '0')}/${String(nowLocal.month).padStart(2, '0')}`;
   const time = `${String(nowLocal.hour).padStart(2, '0')}:${String(nowLocal.minute).padStart(2, '0')}`;
-  const avatarUrl = String(req.query.avatarUrl || '').trim() || await fetchTwitchAvatar(username);
+  const avatarUrl = String(req.query.avatarUrl || '').trim() || (await fetchTwitchAvatar(username)) || DEFAULT_AVATAR_URL;
   const alert = await createManualAlert({
     id: uid('manual'), channel, username, date, time,
     avatarUrl: sanitizeAvatarUrl(avatarUrl),
